@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SnipVault — your local snippet vault</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%92%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">🔒</div>
+      <div>
+        <div class="brand-name">SnipVault</div>
+        <div class="brand-tag">local snippet vault</div>
+      </div>
+    </div>
+
+    <button class="new-btn" id="newBtn">＋  New snip</button>
+
+    <div class="search">
+      <input id="searchInput" type="search" placeholder="Search snips…  (Ctrl+K)" autocomplete="off" />
+    </div>
+
+    <div class="section-label">Filters</div>
+    <nav class="filters">
+      <button class="filter active" data-cat="All">
+        <span>📚 All</span><span class="count" id="countAll">0</span>
+      </button>
+      <button class="filter" data-cat="Pinned">
+        <span>📌 Pinned</span><span class="count" id="countPinned">0</span>
+      </button>
+    </nav>
+
+    <div class="section-label">Categories</div>
+    <nav class="cats" id="catList"></nav>
+
+    <div class="add-cat">
+      <input id="newCatInput" placeholder="+ new category" maxlength="32" />
+    </div>
+
+    <div class="sidebar-footer">
+      <button id="themeBtn" title="Toggle theme">🌓 Theme</button>
+      <button id="exportBtn" title="Export all">⬇ Export</button>
+      <button id="importBtn" title="Import JSON">⬆ Import</button>
+      <input type="file" id="importFile" accept="application/json" hidden />
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="crumb" id="crumb">All snips</div>
+      <div class="stats" id="stats"></div>
+    </header>
+
+    <section class="content">
+      <div class="list-pane">
+        <div class="list-empty" id="listEmpty">
+          <div class="empty-emoji">🗂️</div>
+          <div class="empty-title">No snips yet</div>
+          <div class="empty-sub">Press <kbd>Ctrl</kbd>+<kbd>N</kbd> or click <b>＋ New snip</b> to start your vault.</div>
+        </div>
+        <ul class="snip-list" id="snipList"></ul>
+      </div>
+
+      <div class="detail-pane" id="detailPane">
+        <div class="placeholder">
+          <div class="placeholder-emoji">📝</div>
+          <div>Select a snip to view, edit, or copy.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <span id="modalTitle">New snip</span>
+        <button class="x" id="modalClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <label>Title</label>
+        <input id="fTitle" placeholder="Short title (auto from first line)" />
+
+        <label>Content</label>
+        <textarea id="fContent" placeholder="Paste your code, URL, note, color hex, command…" rows="10"></textarea>
+
+        <div class="row">
+          <div class="col">
+            <label>Category</label>
+            <select id="fCategory"></select>
+          </div>
+          <div class="col">
+            <label>Tags <span class="hint">(comma separated)</span></label>
+            <input id="fTags" placeholder="regex, python, snippet" />
+          </div>
+        </div>
+
+        <label class="check">
+          <input type="checkbox" id="fPinned" /> Pin this snip
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" id="modalCancel">Cancel</button>
+        <button class="btn primary" id="modalSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

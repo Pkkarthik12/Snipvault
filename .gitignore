@@ -1,0 +1,9 @@
+# SnipVault — ignore runtime data, keep folder
+data/*
+!data/.gitkeep
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.DS_Store
