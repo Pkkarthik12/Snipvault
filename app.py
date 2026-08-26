@@ -8,13 +8,14 @@ Then open: http://127.0.0.1:5732
 
 import os
 import sys
+import time
 import json
 import uuid
 import datetime
 import webbrowser
 import threading
 from pathlib import Path
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, url_for
 
 # Ensure safe UTF-8 output across Windows consoles
 if sys.platform == "win32":
@@ -413,17 +414,20 @@ def import_all():
 
 # ----------------------------- Boot --------------------------------------
 
-def open_browser():
-    webbrowser.open_new(f"http://127.0.0.1:{PORT}")
+def open_browser(port):
+    time.sleep(1.0)
+    webbrowser.open_new(f"http://localhost:{port}")
 
 
 if __name__ == "__main__":
     ensure_data()
+    port = int(os.environ.get("PORT", PORT))
     print("=" * 52)
     print("  [SnipVault] SnipVault is running!")
-    print(f"  Open:  http://127.0.0.1:{PORT}")
-    print(f"  Data:  {DATA_FILE}")
-    print("  Stop:  Press Ctrl+C")
+    print(f"  Localhost:  http://localhost:{port}")
+    print(f"  Direct IP:  http://127.0.0.1:{port}")
+    print(f"  Data File:  {DATA_FILE}")
+    print("  Stop Vault: Press Ctrl+C in this terminal")
     print("=" * 52)
-    threading.Timer(1.0, open_browser).start()
-    app.run(host="127.0.0.1", port=PORT, debug=False, use_reloader=False)
+    threading.Thread(target=open_browser, args=(port,), daemon=True).start()
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
