@@ -165,8 +165,14 @@ let toastTimer;
 function toast(msg) {
   els.toast.textContent = msg;
   els.toast.hidden = false;
+  els.toast.classList.add("show");
+  els.toast.style.display = "block";
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (els.toast.hidden = true), 2000);
+  toastTimer = setTimeout(() => {
+    els.toast.hidden = true;
+    els.toast.classList.remove("show");
+    els.toast.style.display = "none";
+  }, 2200);
 }
 
 /* ----- Rendering ----------------------------------------------------- */
@@ -188,6 +194,22 @@ async function refresh() {
   renderList();
   renderCategories(stats);
   renderStats(stats, listRes.total ?? state.snips.length);
+
+  // If currently active snippet is still in list, re-render detail with fresh data
+  if (state.activeId) {
+    const existing = state.snips.find(s => s.id === state.activeId);
+    if (existing) {
+      renderDetail(existing);
+    } else {
+      state.activeId = null;
+      renderDetail(null);
+    }
+  }
+
+  // Auto-select first snippet if none selected on desktop
+  if (!state.activeId && state.snips.length > 0 && window.innerWidth > 900) {
+    selectSnip(state.snips[0].id);
+  }
 }
 
 function renderList() {
@@ -261,7 +283,7 @@ function renderList() {
         if (ok) {
           await api.use(s.id);
           toast("✅ Copied to clipboard");
-          refresh();
+          await refresh();
         } else {
           toast("⚠ Failed to copy");
         }
@@ -392,7 +414,7 @@ function renderDetail(s) {
         if (usesEl) usesEl.textContent = `· used ${s.uses} times`;
       }
       toast("✅ Copied to clipboard");
-      refresh();
+      await refresh();
     } else {
       toast("⚠ Failed to copy");
     }
@@ -404,8 +426,9 @@ function renderDetail(s) {
     const res = await api.update(s.id, { pinned: newPinned });
     if (res && res.snip) {
       toast(newPinned ? "📌 Pinned to top" : "Unpinned");
-      await selectSnip(s.id);
+      state.activeId = s.id;
       await refresh();
+      await selectSnip(s.id);
     }
   });
 
@@ -449,38 +472,52 @@ function openModal(snip = null) {
   els.fTags.value = snip ? (snip.tags || []).join(", ") : "";
 
   // Populate categories
+  const currentCat = snip
+    ? snip.category
+    : (state.category !== "All" && state.category !== "Pinned" ? state.category : "General");
+
   els.fCategory.innerHTML = state.categories
-    .map(c => `<option ${snip && snip.category === c ? "selected" : ""}>${escapeHTML(c)}</option>`)
+    .map(c => `<option value="${escapeHTML(c)}" ${currentCat === c ? "selected" : ""}>${escapeHTML(c)}</option>`)
     .join("");
 
-  if (snip && snip.category && !state.categories.includes(snip.category)) {
+  if (currentCat && !state.categories.includes(currentCat)) {
     const opt = document.createElement("option");
+    opt.value = currentCat;
     opt.selected = true;
-    opt.textContent = snip.category;
+    opt.textContent = currentCat;
     els.fCategory.appendChild(opt);
   }
 
   els.modal.hidden = false;
-  setTimeout(() => els.fContent.focus(), 40);
+  els.modal.classList.add("open");
+  els.modal.style.display = "grid";
+  setTimeout(() => (snip ? els.fContent : els.fTitle).focus(), 40);
 }
 
 function closeModal() {
   els.modal.hidden = true;
+  els.modal.classList.remove("open");
+  els.modal.style.display = "none";
   state.editingId = null;
+  els.fTitle.value = "";
+  els.fContent.value = "";
+  els.fTags.value = "";
+  els.fPinned.checked = false;
 }
 
 async function saveModal() {
   const content = els.fContent.value;
-  if (!content.trim()) {
-    toast("⚠ Content is empty");
+  if (!content || !content.trim()) {
+    toast("⚠ Content is required");
     els.fContent.focus();
     return;
   }
 
+  const category = els.fCategory.value || "General";
   const payload = {
     title: els.fTitle.value.trim(),
     content: content,
-    category: els.fCategory.value || "General",
+    category: category,
     tags: els.fTags.value.split(",").map(s => s.trim().replace(/^#/, "")).filter(Boolean),
     pinned: els.fPinned.checked,
   };
@@ -490,6 +527,13 @@ async function saveModal() {
     res = await api.update(state.editingId, payload);
   } else {
     res = await api.create(payload);
+    // Reset filters to All so user sees their new snip right away
+    if (state.category !== "All" && state.category !== category) {
+      state.category = "All";
+      els.crumb.textContent = "All snips";
+    }
+    state.query = "";
+    els.search.value = "";
   }
 
   if (!res || res.error) {
@@ -593,8 +637,9 @@ function wire() {
   // Search
   els.search.addEventListener("input", debounce(() => {
     state.query = els.search.value.trim();
+    state.activeId = null;
     refresh();
-  }, 180));
+  }, 150));
 
   // New snip
   els.newBtn.addEventListener("click", () => {
@@ -603,11 +648,25 @@ function wire() {
   });
 
   // Modal actions
-  els.modalClose.addEventListener("click", closeModal);
-  els.modalCancel.addEventListener("click", closeModal);
-  els.modalSave.addEventListener("click", saveModal);
+  els.modalClose.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeModal();
+  });
+  els.modalCancel.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeModal();
+  });
+  els.modalSave.addEventListener("click", (e) => {
+    e.preventDefault();
+    saveModal();
+  });
   els.modal.addEventListener("click", (e) => {
-    if (e.target === els.modal) closeModal();
+    if (e.target === els.modal) {
+      e.preventDefault();
+      closeModal();
+    }
   });
 
   // Ctrl+Enter / Cmd+Enter inside modal
@@ -652,6 +711,7 @@ function wire() {
       state.category = b.dataset.cat;
       els.crumb.textContent = state.category === "All" ? "All snips" :
         state.category === "Pinned" ? "Pinned snips" : `Category: ${state.category}`;
+      state.activeId = null;
       closeSidebar();
       refresh();
     });

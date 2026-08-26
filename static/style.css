@@ -1,3 +1,8 @@
+/* ----- Universal hidden utility -------------------------------------- */
+[hidden] {
+  display: none !important;
+}
+
 /* ----- SnipVault styles ---------------------------------------------- */
 
 :root {
@@ -41,6 +46,7 @@ body {
   color: var(--text);
   display: grid;
   grid-template-columns: 280px 1fr;
+  height: 100vh;
   overflow: hidden;
   font-size: 14px;
 }
@@ -194,6 +200,8 @@ body {
 .main {
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  min-width: 0;
   overflow: hidden;
 }
 .topbar {
@@ -203,6 +211,7 @@ body {
   padding: 14px 22px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
+  flex-shrink: 0;
 }
 .topbar-left {
   display: flex;
@@ -231,7 +240,8 @@ body {
   display: grid;
   grid-template-columns: 360px 1fr;
   gap: 0;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -239,6 +249,8 @@ body {
   border-right: 1px solid var(--border);
   overflow-y: auto;
   background: var(--bg);
+  min-height: 0;
+  height: 100%;
 }
 
 .snip-list { list-style: none; margin: 0; padding: 8px; }
@@ -419,10 +431,15 @@ kbd {
 /* ----- Modal --------------------------------------------------------- */
 .modal {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,.55);
-  display: grid; place-items: center;
-  z-index: 100;
+  background: rgba(0, 0, 0, 0.65);
+  display: none;
+  place-items: center;
+  z-index: 1000;
   backdrop-filter: blur(4px);
+}
+.modal.open,
+.modal:not([hidden]) {
+  display: grid !important;
 }
 .modal-card {
   width: min(640px, 92vw);
@@ -440,6 +457,11 @@ kbd {
 .modal-head .x {
   background: transparent; border: none; color: var(--muted);
   font-size: 16px; cursor: pointer;
+  padding: 4px 8px; border-radius: 6px;
+}
+.modal-head .x:hover {
+  background: var(--panel-2);
+  color: var(--text);
 }
 .modal-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
 .modal-body label {
@@ -489,12 +511,18 @@ kbd {
   background: var(--panel);
   border: 1px solid var(--accent);
   color: var(--accent);
-  padding: 10px 16px;
+  padding: 10px 18px;
   border-radius: 999px;
   font-weight: 600;
   font-size: 13px;
   box-shadow: var(--shadow);
-  z-index: 200;
+  z-index: 2000;
+  display: none;
+  pointer-events: none;
+}
+.toast.show,
+.toast:not([hidden]) {
+  display: block !important;
 }
 
 /* ----- Responsive ---------------------------------------------------- */
