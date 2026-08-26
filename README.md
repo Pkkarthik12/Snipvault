@@ -136,7 +136,4 @@ MIT — do whatever you want, just don't blame us if your vault of cat memes get
 
 ---
 
-## 🙌 Credits
 
-Built as a simple, useful product for everyone.
-SnipVault · 2026
