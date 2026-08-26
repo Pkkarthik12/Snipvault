@@ -1,42 +1,84 @@
 /* ----- SnipVault frontend ------------------------------------------- */
 
 const api = {
+  async _fetch(url, options = {}) {
+    try {
+      const r = await fetch(url, options);
+      const data = await r.json();
+      if (!r.ok) {
+        return { error: data.error || `HTTP error ${r.status}` };
+      }
+      return data;
+    } catch (e) {
+      console.error("API error for " + url, e);
+      return { error: e.message || "Network request failed" };
+    }
+  },
+
   async list(params = {}) {
     const q = new URLSearchParams(params).toString();
-    const r = await fetch("/api/snips" + (q ? "?" + q : ""));
-    return r.json();
+    const data = await this._fetch("/api/snips" + (q ? "?" + q : ""));
+    return data && data.snips ? data : { snips: [], total: 0 };
   },
-  async get(id) { return (await fetch("/api/snips/" + id)).json(); },
+
+  async get(id) {
+    return this._fetch("/api/snips/" + encodeURIComponent(id));
+  },
+
   async create(payload) {
-    return (await fetch("/api/snips", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+    return this._fetch("/api/snips", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-    })).json();
+    });
   },
+
   async update(id, payload) {
-    return (await fetch("/api/snips/" + id, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+    return this._fetch("/api/snips/" + encodeURIComponent(id), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-    })).json();
+    });
   },
+
   async remove(id) {
-    return (await fetch("/api/snips/" + id, { method: "DELETE" })).json();
+    return this._fetch("/api/snips/" + encodeURIComponent(id), { method: "DELETE" });
   },
-  async use(id) { return (await fetch("/api/snips/" + id + "/use", { method: "POST" })).json(); },
-  async categories() { return (await fetch("/api/categories")).json(); },
+
+  async use(id) {
+    return this._fetch("/api/snips/" + encodeURIComponent(id) + "/use", { method: "POST" });
+  },
+
+  async categories() {
+    const res = await this._fetch("/api/categories");
+    return res && res.categories ? res : { categories: [] };
+  },
+
   async addCategory(name) {
-    return (await fetch("/api/categories", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+    return this._fetch("/api/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
-    })).json();
+    });
   },
-  async stats() { return (await fetch("/api/stats")).json(); },
-  async exportAll() { return (await fetch("/api/export")).json(); },
+
+  async stats() {
+    const res = await this._fetch("/api/stats");
+    return res && typeof res.total === "number"
+      ? res
+      : { total: 0, pinned: 0, total_uses: 0, by_category: {}, tags: [] };
+  },
+
+  async exportAll() {
+    return this._fetch("/api/export");
+  },
+
   async importAll(payload) {
-    return (await fetch("/api/import", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+    return this._fetch("/api/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-    })).json();
+    });
   },
 };
 
@@ -49,11 +91,49 @@ const state = {
   editingId: null,
 };
 
+/* ----- Clipboard fallback -------------------------------------------- */
+async function copyText(text) {
+  if (!text) return false;
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  // Resilient textarea fallback
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.top = "-9999px";
+  ta.style.left = "-9999px";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch (err) {
+    ok = false;
+  }
+  document.body.removeChild(ta);
+  return ok;
+}
+
 /* ----- DOM refs ------------------------------------------------------ */
 const $ = (id) => document.getElementById(id);
 const els = {
+  sidebar: $("sidebar"),
+  backdrop: $("sidebarBackdrop"),
+  menuBtn: $("menuBtn"),
   list: $("snipList"),
   empty: $("listEmpty"),
+  emptyEmoji: $("emptyEmoji"),
+  emptyTitle: $("emptyTitle"),
+  emptySub: $("emptySub"),
   detail: $("detailPane"),
   catList: $("catList"),
   crumb: $("crumb"),
@@ -86,26 +166,28 @@ function toast(msg) {
   els.toast.textContent = msg;
   els.toast.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (els.toast.hidden = true), 1800);
+  toastTimer = setTimeout(() => (els.toast.hidden = true), 2000);
 }
 
 /* ----- Rendering ----------------------------------------------------- */
 async function refresh() {
-  const params = { q: state.query };
+  const params = {};
+  if (state.query) params.q = state.query;
   if (state.category === "Pinned") params.pinned = 1;
   else if (state.category !== "All") params.category = state.category;
 
-  const [{ snips, total }, catRes, stats] = await Promise.all([
+  const [listRes, catRes, stats] = await Promise.all([
     api.list(params),
     api.categories(),
     api.stats(),
   ]);
 
-  state.snips = snips;
-  state.categories = catRes.categories;
+  state.snips = listRes.snips || [];
+  state.categories = catRes.categories || [];
+
   renderList();
-  renderCategories();
-  renderStats(stats, total);
+  renderCategories(stats);
+  renderStats(stats, listRes.total ?? state.snips.length);
 }
 
 function renderList() {
@@ -113,8 +195,27 @@ function renderList() {
   if (state.snips.length === 0) {
     els.empty.hidden = false;
     els.empty.style.display = "flex";
+
+    if (state.query) {
+      els.emptyEmoji.textContent = "🔍";
+      els.emptyTitle.textContent = "No matches found";
+      els.emptySub.textContent = `No snips match "${state.query}". Try a different keyword or tag.`;
+    } else if (state.category === "Pinned") {
+      els.emptyEmoji.textContent = "📌";
+      els.emptyTitle.textContent = "No pinned snips";
+      els.emptySub.textContent = "Pin your most used snips so they stay right at the top.";
+    } else if (state.category !== "All") {
+      els.emptyEmoji.textContent = "🏷️";
+      els.emptyTitle.textContent = `No snips in "${state.category}"`;
+      els.emptySub.textContent = "Click ＋ New snip to create a snippet in this category.";
+    } else {
+      els.emptyEmoji.textContent = "🗂️";
+      els.emptyTitle.textContent = "No snips yet";
+      els.emptySub.innerHTML = 'Press <kbd>Ctrl</kbd>+<kbd>N</kbd> or click <b>＋ New snip</b> to start your vault.';
+    }
     return;
   }
+
   els.empty.hidden = true;
   els.empty.style.display = "none";
 
@@ -122,30 +223,71 @@ function renderList() {
     const li = document.createElement("li");
     li.className = "snip-card" + (s.id === state.activeId ? " active" : "");
     li.dataset.id = s.id;
+
+    const tagsHtml = (s.tags || []).slice(0, 3).map(t =>
+      `<span class="tag-pill" data-tag="${escapeHTML(t)}">#${escapeHTML(t)}</span>`
+    ).join("");
+
     li.innerHTML = `
       <div class="row1">
-        <div class="title">${escapeHTML(s.title || "(untitled)")}</div>
-        ${s.pinned ? '<div class="pin">📌</div>' : ""}
+        <div class="title" title="${escapeHTML(s.title || "(untitled)")}">${escapeHTML(s.title || "(untitled)")}</div>
+        <div class="card-badges">
+          ${s.pinned ? '<span class="pin" title="Pinned">📌</span>' : ""}
+          <button class="card-copy-btn" title="Copy snippet" data-id="${s.id}">📋</button>
+        </div>
       </div>
       <div class="preview">${escapeHTML(s.content)}</div>
       <div class="meta">
-        <div>
+        <div class="meta-tags">
           <span class="cat-pill">${escapeHTML(s.category || "General")}</span>
-          ${(s.tags || []).slice(0, 3).map(t => `<span class="tag-pill">#${escapeHTML(t)}</span>`).join("")}
+          ${tagsHtml}
         </div>
-        <div>used ${s.uses || 0}×</div>
+        <div class="meta-uses">used ${s.uses || 0}×</div>
       </div>
     `;
-    li.addEventListener("click", () => selectSnip(s.id));
+
+    // Click card to view
+    li.addEventListener("click", (e) => {
+      if (e.target.closest(".tag-pill") || e.target.closest(".card-copy-btn")) return;
+      selectSnip(s.id);
+    });
+
+    // Quick copy button on card
+    const copyBtn = li.querySelector(".card-copy-btn");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const ok = await copyText(s.content);
+        if (ok) {
+          await api.use(s.id);
+          toast("✅ Copied to clipboard");
+          refresh();
+        } else {
+          toast("⚠ Failed to copy");
+        }
+      });
+    }
+
+    // Tag pills inside card
+    li.querySelectorAll(".tag-pill").forEach(pill => {
+      pill.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const tag = pill.dataset.tag;
+        if (tag) {
+          state.query = tag;
+          els.search.value = tag;
+          refresh();
+        }
+      });
+    });
+
     els.list.appendChild(li);
   }
 }
 
-function renderCategories() {
+function renderCategories(stats) {
   els.catList.innerHTML = "";
-  // counts per category from currently fetched list (refreshed)
-  const counts = {};
-  state.snips.forEach(s => { counts[s.category] = (counts[s.category] || 0) + 1; });
+  const counts = (stats && stats.by_category) || {};
 
   for (const cat of state.categories) {
     const b = document.createElement("button");
@@ -153,34 +295,50 @@ function renderCategories() {
     b.innerHTML = `<span>${escapeHTML(cat)}</span><span class="count">${counts[cat] || 0}</span>`;
     b.addEventListener("click", () => {
       state.category = cat;
-      els.crumb.textContent = cat === "All" ? "All snips" : `Category: ${cat}`;
+      els.crumb.textContent = `Category: ${cat}`;
+      closeSidebar();
       refresh();
     });
     els.catList.appendChild(b);
   }
 
-  // counts in filters
-  const allCount = state.snips.length;
-  const pinnedCount = state.snips.filter(s => s.pinned).length;
-  els.countAll.textContent = allCount;
-  els.countPinned.textContent = pinnedCount;
+  // Count badges
+  els.countAll.textContent = (stats && stats.total) || 0;
+  els.countPinned.textContent = (stats && stats.pinned) || 0;
+
+  // Active filter button state
+  document.querySelectorAll(".filter").forEach(b => {
+    b.classList.toggle("active", b.dataset.cat === state.category);
+  });
 }
 
 function renderStats(stats, filteredTotal) {
+  const total = (stats && stats.total) || 0;
+  const pinned = (stats && stats.pinned) || 0;
+  const uses = (stats && stats.total_uses) || 0;
   els.stats.innerHTML = `
-    <span>${stats.total} total</span> ·
-    <span>${stats.pinned} pinned</span> ·
+    <span>${total} total</span> ·
+    <span>${pinned} pinned</span> ·
     <span>${filteredTotal} shown</span> ·
-    <span>${stats.total_uses} copies</span>
+    <span>${uses} copies</span>
   `;
 }
 
 async function selectSnip(id) {
   state.activeId = id;
   renderList();
-  const { snip } = await api.get(id);
-  if (!snip) { renderDetail(null); return; }
-  renderDetail(snip);
+
+  const res = await api.get(id);
+  if (!res || res.error || !res.snip) {
+    renderDetail(null);
+    return;
+  }
+  renderDetail(res.snip);
+
+  // Smooth scroll on smaller screens
+  if (window.innerWidth <= 900 && els.detail) {
+    els.detail.scrollIntoView({ behavior: "smooth" });
+  }
 }
 
 function renderDetail(s) {
@@ -192,6 +350,13 @@ function renderDetail(s) {
       </div>`;
     return;
   }
+
+  const tagsHtml = (s.tags || []).length
+    ? `<div class="detail-tags">${s.tags.map(t =>
+        `<span class="tag-pill" data-tag="${escapeHTML(t)}">#${escapeHTML(t)}</span>`
+      ).join("")}</div>`
+    : "";
+
   els.detail.innerHTML = `
     <div class="detail-head">
       <div>
@@ -200,41 +365,77 @@ function renderDetail(s) {
           <span class="cat-pill">${escapeHTML(s.category || "General")}</span>
           <span>created ${formatDate(s.created_at)}</span>
           <span>· updated ${formatDate(s.updated_at)}</span>
-          <span>· used ${s.uses || 0} times</span>
+          <span id="detailUses">· used ${s.uses || 0} times</span>
         </div>
       </div>
       <div class="detail-actions">
-        <button class="btn" id="copyBtn">📋 Copy</button>
+        <button class="btn primary" id="copyBtn">📋 Copy</button>
         <button class="btn" id="pinBtn">${s.pinned ? "📌 Unpin" : "📌 Pin"}</button>
         <button class="btn" id="editBtn">✏ Edit</button>
         <button class="btn danger" id="delBtn">🗑 Delete</button>
       </div>
     </div>
     <pre class="detail-body" id="detailBody"></pre>
-    ${(s.tags || []).length ? `<div class="detail-tags">${s.tags.map(t => `<span class="tag-pill">#${escapeHTML(t)}</span>`).join("")}</div>` : ""}
+    ${tagsHtml}
   `;
+
   document.getElementById("detailBody").textContent = s.content;
 
+  // Copy
   document.getElementById("copyBtn").addEventListener("click", async () => {
-    await navigator.clipboard.writeText(s.content);
-    await api.use(s.id);
-    toast("✅ Copied to clipboard");
-    refresh();
+    const ok = await copyText(s.content);
+    if (ok) {
+      const res = await api.use(s.id);
+      if (res && res.snip) {
+        s.uses = res.snip.uses;
+        const usesEl = document.getElementById("detailUses");
+        if (usesEl) usesEl.textContent = `· used ${s.uses} times`;
+      }
+      toast("✅ Copied to clipboard");
+      refresh();
+    } else {
+      toast("⚠ Failed to copy");
+    }
   });
+
+  // Pin / Unpin
   document.getElementById("pinBtn").addEventListener("click", async () => {
-    await api.update(s.id, { pinned: !s.pinned });
-    toast(s.pinned ? "Unpinned" : "📌 Pinned");
-    selectSnip(s.id);
-    refresh();
+    const newPinned = !s.pinned;
+    const res = await api.update(s.id, { pinned: newPinned });
+    if (res && res.snip) {
+      toast(newPinned ? "📌 Pinned to top" : "Unpinned");
+      await selectSnip(s.id);
+      await refresh();
+    }
   });
+
+  // Edit
   document.getElementById("editBtn").addEventListener("click", () => openModal(s));
+
+  // Delete
   document.getElementById("delBtn").addEventListener("click", async () => {
-    if (!confirm("Delete this snip?")) return;
-    await api.remove(s.id);
+    if (!confirm(`Delete "${s.title || "this snip"}"?`)) return;
+    const res = await api.remove(s.id);
+    if (res && res.error) {
+      toast("Error: " + res.error);
+      return;
+    }
     state.activeId = null;
     renderDetail(null);
     toast("🗑 Deleted");
-    refresh();
+    await refresh();
+  });
+
+  // Tag clicks in detail
+  els.detail.querySelectorAll(".tag-pill").forEach(pill => {
+    pill.addEventListener("click", () => {
+      const tag = pill.dataset.tag;
+      if (tag) {
+        state.query = tag;
+        els.search.value = tag;
+        refresh();
+      }
+    });
   });
 }
 
@@ -246,43 +447,72 @@ function openModal(snip = null) {
   els.fContent.value = snip ? snip.content : "";
   els.fPinned.checked = snip ? !!snip.pinned : false;
   els.fTags.value = snip ? (snip.tags || []).join(", ") : "";
-  // populate categories
+
+  // Populate categories
   els.fCategory.innerHTML = state.categories
     .map(c => `<option ${snip && snip.category === c ? "selected" : ""}>${escapeHTML(c)}</option>`)
     .join("");
-  if (snip && !state.categories.includes(snip.category)) {
+
+  if (snip && snip.category && !state.categories.includes(snip.category)) {
     const opt = document.createElement("option");
-    opt.selected = true; opt.textContent = snip.category;
+    opt.selected = true;
+    opt.textContent = snip.category;
     els.fCategory.appendChild(opt);
   }
+
   els.modal.hidden = false;
-  setTimeout(() => els.fContent.focus(), 30);
+  setTimeout(() => els.fContent.focus(), 40);
 }
 
-function closeModal() { els.modal.hidden = true; state.editingId = null; }
+function closeModal() {
+  els.modal.hidden = true;
+  state.editingId = null;
+}
 
 async function saveModal() {
+  const content = els.fContent.value;
+  if (!content.trim()) {
+    toast("⚠ Content is empty");
+    els.fContent.focus();
+    return;
+  }
+
   const payload = {
     title: els.fTitle.value.trim(),
-    content: els.fContent.value,
+    content: content,
     category: els.fCategory.value || "General",
-    tags: els.fTags.value.split(",").map(s => s.trim()).filter(Boolean),
+    tags: els.fTags.value.split(",").map(s => s.trim().replace(/^#/, "")).filter(Boolean),
     pinned: els.fPinned.checked,
   };
-  if (!payload.content.trim()) { toast("⚠ Content is empty"); return; }
+
   let res;
-  if (state.editingId) res = await api.update(state.editingId, payload);
-  else res = await api.create(payload);
-  if (res.error) { toast("Error: " + res.error); return; }
+  if (state.editingId) {
+    res = await api.update(state.editingId, payload);
+  } else {
+    res = await api.create(payload);
+  }
+
+  if (!res || res.error) {
+    toast("Error: " + (res?.error || "Failed to save"));
+    return;
+  }
+
   closeModal();
   toast(state.editingId ? "✅ Saved" : "✨ Created");
-  selectSnip(res.snip.id);
-  refresh();
+
+  await refresh();
+  if (res.snip && res.snip.id) {
+    await selectSnip(res.snip.id);
+  }
 }
 
 /* ----- Import / Export ---------------------------------------------- */
 async function doExport() {
   const data = await api.exportAll();
+  if (!data || data.error) {
+    toast("⚠ Export failed");
+    return;
+  }
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -290,7 +520,7 @@ async function doExport() {
   a.download = `snipvault-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  toast("⬇ Exported");
+  toast("⬇ Exported successfully");
 }
 
 async function doImport(file) {
@@ -298,8 +528,12 @@ async function doImport(file) {
     const txt = await file.text();
     const data = JSON.parse(txt);
     const res = await api.importAll(data);
-    toast(`⬆ Imported ${res.added} snips`);
-    refresh();
+    if (res && res.error) {
+      toast("⚠ Import error: " + res.error);
+      return;
+    }
+    toast(`⬆ Imported ${res.added ?? 0} snips`);
+    await refresh();
   } catch (e) {
     toast("⚠ Invalid JSON file");
   }
@@ -310,9 +544,23 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem("snipvault-theme", theme);
 }
+
 function toggleTheme() {
   const cur = document.documentElement.dataset.theme || "dark";
   applyTheme(cur === "dark" ? "light" : "dark");
+}
+
+/* ----- Mobile Sidebar ------------------------------------------------ */
+function toggleSidebar() {
+  if (els.sidebar) {
+    const isOpen = els.sidebar.classList.toggle("open");
+    if (els.backdrop) els.backdrop.classList.toggle("open", isOpen);
+  }
+}
+
+function closeSidebar() {
+  if (els.sidebar) els.sidebar.classList.remove("open");
+  if (els.backdrop) els.backdrop.classList.remove("open");
 }
 
 /* ----- Helpers ------------------------------------------------------- */
@@ -326,34 +574,66 @@ function formatDate(iso) {
   if (!iso) return "—";
   try {
     const d = new Date(iso);
-    return d.toLocaleString();
-  } catch { return iso; }
+    return isNaN(d.getTime()) ? iso : d.toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...a) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...a), ms);
+  };
 }
 
 /* ----- Events -------------------------------------------------------- */
 function wire() {
+  // Search
   els.search.addEventListener("input", debounce(() => {
     state.query = els.search.value.trim();
     refresh();
   }, 180));
 
-  els.newBtn.addEventListener("click", () => openModal());
+  // New snip
+  els.newBtn.addEventListener("click", () => {
+    closeSidebar();
+    openModal();
+  });
 
+  // Modal actions
   els.modalClose.addEventListener("click", closeModal);
   els.modalCancel.addEventListener("click", closeModal);
   els.modalSave.addEventListener("click", saveModal);
-  els.modal.addEventListener("click", (e) => { if (e.target === els.modal) closeModal(); });
+  els.modal.addEventListener("click", (e) => {
+    if (e.target === els.modal) closeModal();
+  });
 
+  // Ctrl+Enter / Cmd+Enter inside modal
+  els.modal.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      saveModal();
+    }
+  });
+
+  // Add category
   els.newCat.addEventListener("keydown", async (e) => {
     if (e.key !== "Enter") return;
     const name = els.newCat.value.trim();
     if (!name) return;
-    await api.addCategory(name);
+    const res = await api.addCategory(name);
+    if (res && res.error) {
+      toast("Error: " + res.error);
+      return;
+    }
     els.newCat.value = "";
-    toast(`Added "${name}"`);
+    toast(`Added category "${name}"`);
     refresh();
   });
 
+  // Footer buttons
   els.themeBtn.addEventListener("click", toggleTheme);
   els.exportBtn.addEventListener("click", doExport);
   els.importBtn.addEventListener("click", () => els.importFile.click());
@@ -362,53 +642,41 @@ function wire() {
     e.target.value = "";
   });
 
-  // Filter buttons
+  // Mobile menu & backdrop
+  if (els.menuBtn) els.menuBtn.addEventListener("click", toggleSidebar);
+  if (els.backdrop) els.backdrop.addEventListener("click", closeSidebar);
+
+  // Filter buttons (All / Pinned)
   document.querySelectorAll(".filter").forEach(b => {
     b.addEventListener("click", () => {
-      document.querySelectorAll(".filter").forEach(x => x.classList.remove("active"));
-      b.classList.add("active");
       state.category = b.dataset.cat;
       els.crumb.textContent = state.category === "All" ? "All snips" :
         state.category === "Pinned" ? "Pinned snips" : `Category: ${state.category}`;
+      closeSidebar();
       refresh();
     });
   });
 
-  // Keyboard shortcuts
+  // Global keyboard shortcuts
   document.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-      e.preventDefault(); els.search.focus();
+      e.preventDefault();
+      els.search.focus();
+      els.search.select();
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
-      e.preventDefault(); openModal();
+      e.preventDefault();
+      openModal();
     } else if (e.key === "Escape") {
       if (!els.modal.hidden) closeModal();
+      closeSidebar();
     }
   });
-}
-
-function debounce(fn, ms) {
-  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
 /* ----- Boot ---------------------------------------------------------- */
 (async function init() {
   const savedTheme = localStorage.getItem("snipvault-theme") || "dark";
   applyTheme(savedTheme);
-
   wire();
-
-  // Seed some examples on first run
-  const stats = await api.stats();
-  if (stats.total === 0) {
-    const seeds = [
-      { title: "Hello world — Python", content: 'print("Hello, SnipVault 👋")', category: "Code", tags: ["python", "starter"] },
-      { title: "Kill process on port (Windows)", content: "netstat -ano | findstr :PORT\ntaskkill /PID <pid> /F", category: "Command", tags: ["windows", "net"] },
-      { title: "Useful colors", content: "#6ee7b7 — mint\n#34d399 — emerald\n#79c0ff — sky\n#f87171 — rose", category: "Color", tags: ["palette"] },
-      { title: "Regex — email (simple)", content: "^[\\w.+-]+@[\\w-]+\\.[\\w.-]+$", category: "Snippet", tags: ["regex", "email"] },
-      { title: "Welcome to SnipVault", content: "Your snippets live here, locally on your machine.\nPress Ctrl+K to search, Ctrl+N to add a new snip.", category: "Note", tags: ["welcome"], pinned: true },
-    ];
-    for (const s of seeds) await api.create(s);
-  }
-
   await refresh();
 })();

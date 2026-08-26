@@ -8,7 +8,9 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%92%3C/text%3E%3C/svg%3E">
 </head>
 <body>
-  <aside class="sidebar">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+  <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="logo">🔒</div>
       <div>
@@ -37,7 +39,7 @@
     <nav class="cats" id="catList"></nav>
 
     <div class="add-cat">
-      <input id="newCatInput" placeholder="+ new category" maxlength="32" />
+      <input id="newCatInput" placeholder="+ new category (Enter)" maxlength="32" />
     </div>
 
     <div class="sidebar-footer">
@@ -50,16 +52,19 @@
 
   <main class="main">
     <header class="topbar">
-      <div class="crumb" id="crumb">All snips</div>
+      <div class="topbar-left">
+        <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">☰</button>
+        <div class="crumb" id="crumb">All snips</div>
+      </div>
       <div class="stats" id="stats"></div>
     </header>
 
     <section class="content">
       <div class="list-pane">
         <div class="list-empty" id="listEmpty">
-          <div class="empty-emoji">🗂️</div>
-          <div class="empty-title">No snips yet</div>
-          <div class="empty-sub">Press <kbd>Ctrl</kbd>+<kbd>N</kbd> or click <b>＋ New snip</b> to start your vault.</div>
+          <div class="empty-emoji" id="emptyEmoji">🗂️</div>
+          <div class="empty-title" id="emptyTitle">No snips yet</div>
+          <div class="empty-sub" id="emptySub">Press <kbd>Ctrl</kbd>+<kbd>N</kbd> or click <b>＋ New snip</b> to start your vault.</div>
         </div>
         <ul class="snip-list" id="snipList"></ul>
       </div>
@@ -77,11 +82,11 @@
     <div class="modal-card">
       <div class="modal-head">
         <span id="modalTitle">New snip</span>
-        <button class="x" id="modalClose">✕</button>
+        <button class="x" id="modalClose" title="Close (Esc)">✕</button>
       </div>
       <div class="modal-body">
         <label>Title</label>
-        <input id="fTitle" placeholder="Short title (auto from first line)" />
+        <input id="fTitle" placeholder="Short title (auto-generated from first line if blank)" />
 
         <label>Content</label>
         <textarea id="fContent" placeholder="Paste your code, URL, note, color hex, command…" rows="10"></textarea>
@@ -98,12 +103,15 @@
         </div>
 
         <label class="check">
-          <input type="checkbox" id="fPinned" /> Pin this snip
+          <input type="checkbox" id="fPinned" /> Pin this snip to top
         </label>
       </div>
       <div class="modal-foot">
-        <button class="btn ghost" id="modalCancel">Cancel</button>
-        <button class="btn primary" id="modalSave">Save</button>
+        <span class="hint-shortcut">Tip: Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to save</span>
+        <div class="modal-buttons">
+          <button class="btn ghost" id="modalCancel">Cancel</button>
+          <button class="btn primary" id="modalSave">Save</button>
+        </div>
       </div>
     </div>
   </div>

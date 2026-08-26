@@ -45,6 +45,20 @@ body {
   font-size: 14px;
 }
 
+/* ----- Sidebar Backdrop (Mobile) ------------------------------------- */
+.sidebar-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 45;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+}
+.sidebar-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* ----- Sidebar ------------------------------------------------------- */
 .sidebar {
   background: var(--panel);
@@ -54,6 +68,7 @@ body {
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
+  z-index: 50;
 }
 
 .brand {
@@ -123,6 +138,7 @@ body {
   border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
+  transition: background .12s ease, color .12s ease;
 }
 .filter:hover, .cat:hover { background: var(--panel-2); }
 .filter.active, .cat.active {
@@ -136,6 +152,7 @@ body {
   padding: 1px 8px;
   border-radius: 999px;
   font-size: 11px;
+  font-weight: 500;
 }
 .filter.active .count, .cat.active .count {
   background: var(--accent);
@@ -187,6 +204,26 @@ body {
   border-bottom: 1px solid var(--border);
   background: var(--panel);
 }
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.menu-btn {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.menu-btn:hover {
+  background: var(--panel-2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .crumb { font-weight: 700; font-size: 15px; }
 .stats { color: var(--muted); font-size: 12px; }
 
@@ -229,7 +266,33 @@ body {
   white-space: nowrap;
   flex: 1;
 }
+.card-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 .snip-card .pin { font-size: 12px; }
+.card-copy-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  opacity: 0.3;
+  transition: all .15s ease;
+}
+.snip-card:hover .card-copy-btn, .card-copy-btn:focus {
+  opacity: 1;
+  background: var(--panel-2);
+  border-color: var(--border);
+}
+.card-copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .snip-card .preview {
   color: var(--muted);
   font-family: var(--mono);
@@ -247,14 +310,25 @@ body {
   color: var(--muted);
   font-size: 11px;
 }
+.meta-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
 .tag-pill {
   background: var(--panel-2);
   border: 1px solid var(--border);
   padding: 1px 6px;
   border-radius: 999px;
   font-size: 10px;
-  margin-right: 4px;
   color: var(--muted);
+  cursor: pointer;
+  transition: all .12s ease;
+}
+.tag-pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .cat-pill {
   background: var(--accent);
@@ -280,7 +354,7 @@ body {
 }
 .empty-emoji, .placeholder-emoji { font-size: 48px; }
 .empty-title { color: var(--text); font-weight: 600; font-size: 16px; }
-.empty-sub { font-size: 13px; }
+.empty-sub { font-size: 13px; max-width: 320px; line-height: 1.4; }
 kbd {
   background: var(--panel-2);
   border: 1px solid var(--border);
@@ -389,12 +463,23 @@ kbd {
 }
 .modal-body .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .modal-body .hint { font-weight: 400; text-transform: none; color: var(--muted); }
-.modal-body .check { display: flex; gap: 6px; align-items: center; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); }
+.modal-body .check { display: flex; gap: 6px; align-items: center; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); cursor: pointer; }
 
 .modal-foot {
-  display: flex; gap: 8px; justify-content: flex-end;
-  padding: 12px 18px; border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
   background: var(--panel-2);
+}
+.hint-shortcut {
+  font-size: 11px;
+  color: var(--muted);
+}
+.modal-buttons {
+  display: flex;
+  gap: 8px;
 }
 
 /* ----- Toast --------------------------------------------------------- */
@@ -417,12 +502,13 @@ kbd {
   body { grid-template-columns: 1fr; }
   .sidebar {
     position: fixed; top: 0; left: 0; height: 100vh;
-    width: 260px; z-index: 50;
+    width: 280px; z-index: 50;
     transform: translateX(-100%); transition: transform .2s ease;
   }
   .sidebar.open { transform: translateX(0); }
+  .menu-btn { display: inline-flex; }
   .content { grid-template-columns: 1fr; }
-  .list-pane { border-right: none; border-bottom: 1px solid var(--border); }
+  .list-pane { border-right: none; border-bottom: 1px solid var(--border); max-height: 50vh; }
 }
 
 /* scrollbars */
