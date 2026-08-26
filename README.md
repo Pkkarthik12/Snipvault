@@ -26,14 +26,14 @@ SnipVault is the opposite:
 
 ### Option A — Windows
 ```bat
-git clone <your-repo-url> snipvault
+git clone https://github.com/Pkkarthik12/Snipvault.git snipvault
 cd snipvault
 run.bat
 ```
 
 ### Option B — macOS / Linux
 ```bash
-git clone <your-repo-url> snipvault
+git clone https://github.com/Pkkarthik12/Snipvault.git snipvault
 cd snipvault
 chmod +x run.sh
 ./run.sh
@@ -45,7 +45,7 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-Then open: **http://127.0.0.1:5732**
+Then open: **http://localhost:5732** *(or **http://127.0.0.1:5732**)*
 
 The first run seeds a few example snips so you can see how it works. Delete them or keep them — your call.
 
@@ -57,7 +57,8 @@ The first run seeds a few example snips so you can see how it works. Delete them
 | --------------- | ----------------------- |
 | `Ctrl` + `K`    | Focus search            |
 | `Ctrl` + `N`    | New snip                |
-| `Esc`           | Close dialog            |
+| `Ctrl` + `Enter`| Save snip (inside modal)|
+| `Esc`           | Close dialog / menu     |
 
 ---
 
